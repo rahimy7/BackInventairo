@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "9PQEaPKq3BSGu3UPd0mr02B2eymfRMaq7198w+PXK+U=",
+  "Source": "InventarioAPI",
+  "BasePath": "_content/InventarioAPI",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
