@@ -77,18 +77,6 @@ namespace InventarioAPI.Models
     }
 
     // Modelo para la vista de productos disponibles
-    public class ProductHierarchyItem
-    {
-        public string DivisionCode { get; set; } = string.Empty;
-        public string Division { get; set; } = string.Empty;
-        public string CategoryCode { get; set; } = string.Empty;
-        public string Categoria { get; set; } = string.Empty;
-        public string GroupCode { get; set; } = string.Empty;
-        public string Grupo { get; set; } = string.Empty;
-        public string SubGroupCode { get; set; } = string.Empty;
-        public string SubGrupo { get; set; } = string.Empty;
-    }
-
     // Request para eliminar asignación
     public class DeleteAssignmentRequest
     {

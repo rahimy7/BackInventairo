@@ -3,6 +3,25 @@ using System.ComponentModel.DataAnnotations;
 namespace InventarioAPI.Models
 {
   
+
+   public enum RequestStatus
+    {
+        PENDIENTE,
+        EN_REVISION,
+        LISTO,
+        AJUSTADO,
+        DEVUELTO,
+        CANCELADO
+    }
+
+    // Prioridades de las solicitudes
+    public enum RequestPriority
+    {
+        BAJA,
+        NORMAL,
+        ALTA,
+        URGENTE
+    }
     public enum HistoryAction
     {
         CREATED,

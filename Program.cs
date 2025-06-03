@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using InventarioAPI.Data;
 using System.Text.Json.Serialization;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
@@ -17,13 +16,13 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
+
+// Database Contexts
 builder.Services.AddDbContext<InventarioDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddDbContext<InnovacentroDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("InnovacentroConnection")));
-
-
 
 // Swagger Configuration
 builder.Services.AddSwaggerGen(c =>
@@ -32,7 +31,7 @@ builder.Services.AddSwaggerGen(c =>
     { 
         Title = "Inventario API", 
         Version = "v1",
-        Description = "API para sistema de inventario con conteo físico"
+        Description = "API para sistema de inventario con conteo físico y gestión de usuarios"
     });
     
     // JWT Bearer Token Configuration for Swagger
@@ -63,6 +62,14 @@ builder.Services.AddSwaggerGen(c =>
             new List<string>()
         }
     });
+
+    // Enable XML comments for better Swagger documentation
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath);
+    }
 });
 
 // JWT Configuration
@@ -84,17 +91,26 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.Zero // Opcional: reducir el tiempo de tolerancia
     };
 });
 
 builder.Services.AddAuthorization();
 
 // Register Services
+// Core Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
+
+// Business Logic Services
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
 builder.Services.AddScoped<IRequestService, RequestService>();
-builder.Services.AddScoped<IInventoryCountService, InventoryCountService>(); // ✅ NUEVO SERVICIO
+builder.Services.AddScoped<IInventoryCountService, InventoryCountService>();
+
+// Supporting Services
+builder.Services.AddScoped<IStoreService, StoreService>();
+builder.Services.AddScoped<IDivisionService, DivisionService>();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -108,6 +124,17 @@ builder.Services.AddCors(options =>
         });
 });
 
+// Health Checks
+builder.Services.AddHealthChecks();
+
+// Logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+// Add memory cache
+builder.Services.AddMemoryCache();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -118,12 +145,46 @@ if (app.Environment.IsDevelopment())
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Inventario API V1");
         c.RoutePrefix = string.Empty; // Swagger en la raíz
+        c.EnableDeepLinking();
+        c.DisplayRequestDuration();
     });
 }
+
+// Security Headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    
+    await next();
+});
+
+// Global Exception Handler
+app.UseExceptionHandler("/error");
+app.Map("/error", (HttpContext context) =>
+{
+    var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    
+    return Results.Json(new
+    {
+        Success = false,
+        Message = "Error interno del servidor",
+        Error = app.Environment.IsDevelopment() ? exception?.Message : "Ha ocurrido un error inesperado"
+    }, statusCode: 500);
+});
+
+// Health Check endpoint
+app.MapHealthChecks("/health");
 
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Startup logging
+app.Logger.LogInformation("🚀 Inventario API iniciada exitosamente");
+app.Logger.LogInformation("🔗 Swagger disponible en: {SwaggerUrl}", app.Environment.IsDevelopment() ? "http://localhost:5248" : "URL de producción");
 
 app.Run();
