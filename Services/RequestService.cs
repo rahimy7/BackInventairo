@@ -179,20 +179,21 @@ namespace InventarioAPI.Services
                 var whereClause = string.Join(" AND ", whereConditions);
 
                 // Consulta con paginación
-                var query = $@"
-                    SELECT COUNT(*) FROM ProductRequests r WHERE {whereClause};
-                    
-                    SELECT r.*, 
-                           ROW_NUMBER() OVER (ORDER BY r.CreatedDate DESC) as RowNum
-                    FROM ProductRequests r 
-                    WHERE {whereClause}
-                    ORDER BY r.CreatedDate DESC
-                    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+      var query = $@"
+    SELECT COUNT(*) FROM ProductRequests r WHERE {whereClause};
+    
+    SELECT * FROM (
+        SELECT r.*, ROW_NUMBER() OVER (ORDER BY r.CreatedDate DESC) as RowNum
+        FROM ProductRequests r 
+        WHERE {whereClause}
+    ) t 
+    WHERE RowNum BETWEEN @StartRow AND @EndRow
+    ORDER BY CreatedDate DESC";
 
                 using var command = new SqlCommand(query, connection);
                 command.Parameters.AddRange(parameters.ToArray());
-                command.Parameters.Add("@Offset", SqlDbType.Int).Value = (request.PageNumber - 1) * request.PageSize;
-                command.Parameters.Add("@PageSize", SqlDbType.Int).Value = request.PageSize;
+                command.Parameters.Add("@StartRow", SqlDbType.Int).Value = (request.PageNumber - 1) * request.PageSize + 1;
+                command.Parameters.Add("@EndRow", SqlDbType.Int).Value = request.PageNumber * request.PageSize;
 
                 using var reader = await command.ExecuteReaderAsync();
                 

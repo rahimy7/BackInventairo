@@ -375,19 +375,19 @@ namespace InventarioAPI.Services
                 var whereClause = string.Join(" AND ", whereConditions);
 
                 // Consulta con paginación usando la vista completa
-                var query = $@"
-                    SELECT COUNT(*) FROM View_InventoryCountsComplete ic 
-                    LEFT JOIN RequestCodes rc ON ic.CodeID = rc.ID
-                    WHERE {whereClause};
-                    
-                    SELECT * FROM (
-                        SELECT *, ROW_NUMBER() OVER (ORDER BY ic.FECHA DESC) as RowNum
-                        FROM View_InventoryCountsComplete ic 
-                        LEFT JOIN RequestCodes rc ON ic.CodeID = rc.ID
-                        WHERE {whereClause}
-                    ) t 
-                    WHERE RowNum BETWEEN @StartRow AND @EndRow
-                    ORDER BY FECHA DESC";
+              var query = $@"
+    SELECT COUNT(*) FROM View_InventoryCountsComplete ic 
+    LEFT JOIN RequestCodes rc ON ic.CodeID = rc.ID
+    WHERE {whereClause};
+    
+    SELECT * FROM (
+        SELECT *, ROW_NUMBER() OVER (ORDER BY ic.FECHA DESC) as RowNum
+        FROM View_InventoryCountsComplete ic 
+        LEFT JOIN RequestCodes rc ON ic.CodeID = rc.ID
+        WHERE {whereClause}
+    ) t 
+    WHERE RowNum BETWEEN @StartRow AND @EndRow
+    ORDER BY FECHA DESC";
 
                 using var command = new SqlCommand(query, connection);
                 command.Parameters.AddRange(parameters.ToArray());
@@ -654,15 +654,19 @@ namespace InventarioAPI.Services
                 // Estadísticas por estado
                 var statusWhereClause = string.IsNullOrEmpty(tienda) ? "WHERE IsActive = 1" : "WHERE IsActive = 1 AND TIENDA = @Tienda3";
                 var statusStatsQuery = $@"
-                    SELECT 
-                        ESTADO,
-                        COUNT(*) as Count,
-                        CAST(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM InventoryCounts {statusWhereClause.Replace("@Tienda3", "@Tienda4")}) AS DECIMAL(5,2)) as Percentage,
-                        SUM(COSTO_TOTAL) as TotalCosto
-                    FROM InventoryCounts 
-                    {statusWhereClause}
-                    GROUP BY ESTADO
-                    ORDER BY Count DESC";
+    SELECT 
+        ESTADO,
+        COUNT(*) as Count,
+        CAST(COUNT(*) * 100.0 / (
+            SELECT COUNT(*) 
+            FROM InventoryCounts 
+            {statusWhereClause.Replace("@Tienda3", "@Tienda4")}
+        ) AS DECIMAL(5,2)) as Percentage,
+        SUM(COSTO_TOTAL) as TotalCosto
+    FROM InventoryCounts 
+    {statusWhereClause}
+    GROUP BY ESTADO
+    ORDER BY Count DESC";
 
                 using var statusCommand = new SqlCommand(statusStatsQuery, connection);
                 if (!string.IsNullOrEmpty(tienda))
@@ -728,9 +732,9 @@ namespace InventarioAPI.Services
                 // Conteos recientes (últimos 10)
                 var recentWhereClause = string.IsNullOrEmpty(tienda) ? "WHERE IsActive = 1" : "WHERE IsActive = 1 AND TIENDA = @Tienda7";
                 var recentQuery = $@"
-                    SELECT TOP 10 * FROM View_InventoryCountsComplete 
-                    {recentWhereClause}
-                    ORDER BY FECHA DESC";
+    SELECT TOP 10 * FROM View_InventoryCountsComplete 
+    {recentWhereClause}
+    ORDER BY FECHA DESC";
 
                 using var recentCommand = new SqlCommand(recentQuery, connection);
                 if (!string.IsNullOrEmpty(tienda))

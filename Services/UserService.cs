@@ -1,8 +1,10 @@
+using InventarioAPI.Helpers;
 using InventarioAPI.Models;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+
 
 namespace InventarioAPI.Services
 {
@@ -68,16 +70,17 @@ namespace InventarioAPI.Services
 
                 var whereClause = string.Join(" AND ", whereConditions);
 
-                var query = $@"
-                    SELECT u.*, 
-                           STRING_AGG(ud.DivisionCode, ',') as DivisionesAsignadas
-                    FROM Usuarios u
-                    LEFT JOIN UserDivisions ud ON u.ID = ud.UserID AND ud.IsActive = 1
-                    WHERE {whereClause}
-                    GROUP BY u.ID, u.USUARIO, u.NOMBRE, u.EMAIL, u.PERFIL, u.TIENDA, u.AREA, 
-                             u.IsActive, u.UltimoAcceso, u.FechaCreacion, u.FechaActualizacion
-                    ORDER BY u.FechaCreacion DESC
-                    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+                // SQL Server 2014 compatible - usando STUFF y FOR XML PATH en lugar de STRING_AGG
+               var query = $@"
+    SELECT u.*, 
+           STUFF((SELECT ',' + ud.DivisionCode 
+                  FROM UserDivisions ud 
+                  WHERE ud.UserID = u.ID AND ud.IsActive = 1 
+                  FOR XML PATH('')), 1, 1, '') as DivisionesAsignadas
+    FROM USUARIOS u
+    WHERE {whereClause}
+    ORDER BY u.FechaCreacion DESC
+    OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
                 using var command = new SqlCommand(query, connection);
                 command.Parameters.AddRange(parameters.ToArray());
@@ -235,262 +238,290 @@ namespace InventarioAPI.Services
             }
         }
 
-        public async Task<ApiResponse<UserResponse>> UpdateUserAsync(int userId, UpdateUserRequest request, int updatedBy)
+public async Task<ApiResponse<UserResponse>> UpdateUserAsync(int userId, UpdateUserRequest request, int updatedBy)
+{
+    try
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var transaction = connection.BeginTransaction();
+
+        try
         {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
-
-                using var transaction = connection.BeginTransaction();
-
-                try
-                {
-                    // Obtener usuario actual
-                    var currentUser = await GetUserByIdAsync(userId, connection, transaction);
-                    if (currentUser.Data == null)
-                    {
-                        return new ApiResponse<UserResponse>
-                        {
-                            Success = false,
-                            Message = "Usuario no encontrado"
-                        };
-                    }
-
-                    // Construir query de actualización dinámicamente
-                    var updateFields = new List<string>();
-                    var parameters = new List<SqlParameter>();
-
-                    if (!string.IsNullOrEmpty(request.Nombre))
-                    {
-                        updateFields.Add("NOMBRE = @Nombre");
-                        parameters.Add(new SqlParameter("@Nombre", SqlDbType.NVarChar, 200) { Value = request.Nombre });
-                    }
-
-                    if (!string.IsNullOrEmpty(request.Email))
-                    {
-                        // Verificar que el email no esté en uso por otro usuario
-                        const string checkEmailQuery = "SELECT COUNT(1) FROM Usuarios WHERE EMAIL = @Email AND ID != @UserId";
-                        using var checkEmailCommand = new SqlCommand(checkEmailQuery, connection, transaction);
-                        checkEmailCommand.Parameters.Add("@Email", SqlDbType.NVarChar, 200).Value = request.Email;
-                        checkEmailCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-
-                        var emailExists = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync()) > 0;
-                        if (emailExists)
-                        {
-                            return new ApiResponse<UserResponse>
-                            {
-                                Success = false,
-                                Message = "El email ya está en uso por otro usuario"
-                            };
-                        }
-
-                        updateFields.Add("EMAIL = @Email");
-                        parameters.Add(new SqlParameter("@Email", SqlDbType.NVarChar, 200) { Value = request.Email });
-                    }
-
-                    if (!string.IsNullOrEmpty(request.Password))
-                    {
-                        var hashedPassword = HashPassword(request.Password);
-                        updateFields.Add("PASSWORD = @Password");
-                        parameters.Add(new SqlParameter("@Password", SqlDbType.NVarChar, 255) { Value = hashedPassword });
-                    }
-
-                    if (request.Perfil.HasValue)
-                    {
-                        updateFields.Add("PERFIL = @Perfil");
-                        parameters.Add(new SqlParameter("@Perfil", SqlDbType.NVarChar, 50) { Value = request.Perfil.Value.ToString() });
-                    }
-
-                    if (!string.IsNullOrEmpty(request.Tienda))
-                    {
-                        updateFields.Add("TIENDA = @Tienda");
-                        parameters.Add(new SqlParameter("@Tienda", SqlDbType.NVarChar, 50) { Value = request.Tienda });
-                    }
-
-                    if (!string.IsNullOrEmpty(request.Area))
-                    {
-                        updateFields.Add("AREA = @Area");
-                        parameters.Add(new SqlParameter("@Area", SqlDbType.NVarChar, 100) { Value = request.Area });
-                    }
-
-                    if (request.Activo.HasValue)
-                    {
-                        updateFields.Add("IsActive = @Activo");
-                        parameters.Add(new SqlParameter("@Activo", SqlDbType.Bit) { Value = request.Activo.Value });
-                    }
-
-                    if (updateFields.Any())
-                    {
-                        updateFields.Add("FechaActualizacion = GETDATE()");
-                        updateFields.Add("UpdatedBy = @UpdatedBy");
-                        parameters.Add(new SqlParameter("@UpdatedBy", SqlDbType.Int) { Value = updatedBy });
-                        parameters.Add(new SqlParameter("@UserId", SqlDbType.Int) { Value = userId });
-
-                        var updateQuery = $@"
-                            UPDATE Usuarios 
-                            SET {string.Join(", ", updateFields)}
-                            WHERE ID = @UserId";
-
-                        using var updateCommand = new SqlCommand(updateQuery, connection, transaction);
-                        updateCommand.Parameters.AddRange(parameters.ToArray());
-                        await updateCommand.ExecuteNonQueryAsync();
-                    }
-
-                    // Actualizar divisiones si es necesario
-                    if (request.DivisionesAsignadas != null)
-                    {
-                        var finalProfile = request.Perfil ?? currentUser.Data.Perfil;
-                        var finalTienda = request.Tienda ?? currentUser.Data.Tienda;
-
-                        if (finalProfile == UserProfile.LIDER)
-                        {
-                            // Desactivar divisiones actuales
-                            const string deactivateDivisionsQuery = @"
-                                UPDATE UserDivisions 
-                                SET IsActive = 0 
-                                WHERE UserID = @UserId AND Tienda = @Tienda";
-
-                            using var deactivateCommand = new SqlCommand(deactivateDivisionsQuery, connection, transaction);
-                            deactivateCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-                            deactivateCommand.Parameters.Add("@Tienda", SqlDbType.NVarChar, 50).Value = finalTienda;
-                            await deactivateCommand.ExecuteNonQueryAsync();
-
-                            // Asignar nuevas divisiones
-                            if (request.DivisionesAsignadas.Any())
-                            {
-                                await AssignDivisionsToUserAsync(userId, finalTienda, request.DivisionesAsignadas, connection, transaction);
-                            }
-                        }
-                    }
-
-                    // Registrar actividad
-                    await LogUserActivityAsync(userId, updatedBy, "user_updated", 
-                                             $"Usuario {currentUser.Data.Usuario} actualizado", 
-                                             "user", userId, null, connection, transaction);
-
-                    transaction.Commit();
-
-                    // Obtener usuario actualizado
-                    var updatedUser = await GetUserByIdAsync(userId);
-                    return new ApiResponse<UserResponse>
-                    {
-                        Success = true,
-                        Message = "Usuario actualizado exitosamente",
-                        Data = updatedUser.Data
-                    };
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-            catch (Exception ex)
+            // Obtener usuario actual
+            var currentUser = await GetUserByIdAsync(userId, connection, transaction);
+            if (currentUser.Data == null)
             {
                 return new ApiResponse<UserResponse>
                 {
                     Success = false,
-                    Message = $"Error al actualizar usuario: {ex.Message}"
+                    Message = "Usuario no encontrado"
                 };
             }
-        }
 
-        public async Task<ApiResponse<bool>> DeleteUserAsync(int userId, int deletedBy)
-        {
-            try
+            // Lista para construir la consulta UPDATE dinámicamente
+            var setClauses = new List<string>();
+            var parameters = new List<SqlParameter>();
+
+            // Agregar campos a actualizar solo si tienen valor
+            if (!string.IsNullOrEmpty(request.Nombre))
             {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
+                setClauses.Add("NOMBRE = @Nombre");
+                parameters.Add(new SqlParameter("@Nombre", SqlDbType.NVarChar, 200) { Value = request.Nombre });
+            }
 
-                using var transaction = connection.BeginTransaction();
+            if (!string.IsNullOrEmpty(request.Email))
+            {
+                // Verificar que el email no esté en uso por otro usuario
+                const string checkEmailQuery = "SELECT COUNT(1) FROM Usuarios WHERE EMAIL = @Email AND ID != @UserId";
+                using var checkEmailCommand = new SqlCommand(checkEmailQuery, connection, transaction);
+                checkEmailCommand.Parameters.Add("@Email", SqlDbType.NVarChar, 200).Value = request.Email;
+                checkEmailCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
 
-                try
+                var emailExists = Convert.ToInt32(await checkEmailCommand.ExecuteScalarAsync()) > 0;
+                if (emailExists)
                 {
-                    // Verificar que no sea el último administrador
-                    const string checkAdminQuery = @"
-                        SELECT COUNT(1) FROM Usuarios 
-                        WHERE PERFIL = 'ADMINISTRADOR' AND IsActive = 1 AND ID != @UserId";
-
-                    using var checkAdminCommand = new SqlCommand(checkAdminQuery, connection, transaction);
-                    checkAdminCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-
-                    var adminCount = Convert.ToInt32(await checkAdminCommand.ExecuteScalarAsync());
-
-                    // Obtener información del usuario a eliminar
-                    var userToDelete = await GetUserByIdAsync(userId, connection, transaction);
-                    if (userToDelete.Data == null)
+                    return new ApiResponse<UserResponse>
                     {
-                        return new ApiResponse<bool>
-                        {
-                            Success = false,
-                            Message = "Usuario no encontrado"
-                        };
-                    }
+                        Success = false,
+                        Message = "El email ya está en uso por otro usuario"
+                    };
+                }
 
-                    if (userToDelete.Data.Perfil == UserProfile.ADMINISTRADOR && adminCount == 0)
-                    {
-                        return new ApiResponse<bool>
-                        {
-                            Success = false,
-                            Message = "No se puede eliminar el último administrador"
-                        };
-                    }
+                setClauses.Add("EMAIL = @Email");
+                parameters.Add(new SqlParameter("@Email", SqlDbType.NVarChar, 200) { Value = request.Email });
+            }
 
-                    // Soft delete del usuario
-                    const string deleteQuery = @"
-                        UPDATE Usuarios 
-                        SET IsActive = 0, FechaActualizacion = GETDATE(), UpdatedBy = @DeletedBy
-                        WHERE ID = @UserId";
+            if (!string.IsNullOrEmpty(request.Password))
+            {
+                var hashedPassword = HashPassword(request.Password);
+                setClauses.Add("PASSWORD = @Password");
+                parameters.Add(new SqlParameter("@Password", SqlDbType.NVarChar, 255) { Value = hashedPassword });
+            }
 
-                    using var deleteCommand = new SqlCommand(deleteQuery, connection, transaction);
-                    deleteCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-                    deleteCommand.Parameters.Add("@DeletedBy", SqlDbType.Int).Value = deletedBy;
+            if (request.Perfil.HasValue)
+            {
+                var perfilValue = request.Perfil.Value.ToString();
+                setClauses.Add("PERFIL = @Perfil");
+                parameters.Add(new SqlParameter("@Perfil", SqlDbType.NVarChar, 50) { Value = perfilValue });
+            }
 
-                    await deleteCommand.ExecuteNonQueryAsync();
+            if (!string.IsNullOrEmpty(request.Tienda))
+            {
+                setClauses.Add("TIENDA = @Tienda");
+                parameters.Add(new SqlParameter("@Tienda", SqlDbType.NVarChar, 50) { Value = request.Tienda });
+            }
 
-                    // Desactivar divisiones asignadas
+            if (!string.IsNullOrEmpty(request.Area))
+            {
+                setClauses.Add("AREA = @Area");
+                parameters.Add(new SqlParameter("@Area", SqlDbType.NVarChar, 100) { Value = request.Area });
+            }
+
+            if (request.Activo.HasValue)
+            {
+                setClauses.Add("IsActive = @Activo");
+                parameters.Add(new SqlParameter("@Activo", SqlDbType.Bit) { Value = request.Activo.Value });
+            }
+
+            // Solo ejecutar UPDATE si hay campos para actualizar
+            if (setClauses.Any())
+            {
+                // Agregar campos de auditoría UNA SOLA VEZ
+                setClauses.Add("FechaActualizacion = GETDATE()");
+                setClauses.Add("UpdatedBy = @UpdatedBy");
+                
+                // Agregar parámetros de auditoría
+                parameters.Add(new SqlParameter("@UpdatedBy", SqlDbType.Int) { Value = updatedBy });
+                parameters.Add(new SqlParameter("@UserId", SqlDbType.Int) { Value = userId });
+
+                // Construir y ejecutar la consulta
+                var updateQuery = $@"
+                    UPDATE Usuarios 
+                    SET {string.Join(", ", setClauses)}
+                    WHERE ID = @UserId";
+
+                using var updateCommand = new SqlCommand(updateQuery, connection, transaction);
+                updateCommand.Parameters.AddRange(parameters.ToArray());
+                await updateCommand.ExecuteNonQueryAsync();
+            }
+
+            // Actualizar divisiones si es necesario
+            if (request.DivisionesAsignadas != null)
+            {
+                var finalProfile = request.Perfil ?? currentUser.Data.Perfil;
+                var finalTienda = request.Tienda ?? currentUser.Data.Tienda;
+
+                if (finalProfile.ToString() == "LIDER")
+                {
+                    // Desactivar divisiones actuales
                     const string deactivateDivisionsQuery = @"
                         UPDATE UserDivisions 
                         SET IsActive = 0 
-                        WHERE UserID = @UserId";
+                        WHERE UserID = @UserId AND Tienda = @Tienda";
 
                     using var deactivateCommand = new SqlCommand(deactivateDivisionsQuery, connection, transaction);
                     deactivateCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                    deactivateCommand.Parameters.Add("@Tienda", SqlDbType.NVarChar, 50).Value = finalTienda;
                     await deactivateCommand.ExecuteNonQueryAsync();
 
-                    // Registrar actividad
-                    await LogUserActivityAsync(userId, deletedBy, "user_deleted", 
-                                             $"Usuario {userToDelete.Data.Usuario} eliminado", 
-                                             "user", userId, null, connection, transaction);
-
-                    transaction.Commit();
-
-                    return new ApiResponse<bool>
+                    // Asignar nuevas divisiones
+                    if (request.DivisionesAsignadas.Any())
                     {
-                        Success = true,
-                        Message = "Usuario eliminado exitosamente",
-                        Data = true
-                    };
-                }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
+                        await AssignDivisionsToUserAsync(userId, finalTienda, request.DivisionesAsignadas, connection, transaction);
+                    }
                 }
             }
-            catch (Exception ex)
+
+            // Registrar actividad
+            try
+            {
+                await LogUserActivityAsync(userId, updatedBy, "user_updated", 
+                                         $"Usuario {currentUser.Data.Usuario} actualizado", 
+                                         "user", userId, null, connection, transaction);
+            }
+            catch
+            {
+                // Si no existe la tabla de actividad, continuar sin error
+            }
+
+            transaction.Commit();
+
+            // Obtener usuario actualizado
+            var updatedUser = await GetUserByIdAsync(userId);
+            return updatedUser;
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+    catch (Exception ex)
+    {
+        return new ApiResponse<UserResponse>
+        {
+            Success = false,
+            Message = $"Error al actualizar usuario: {ex.Message}"
+        };
+    }
+}
+       // En UserService.cs, reemplazar el método DeleteUserAsync completo:
+public async Task<ApiResponse<bool>> DeleteUserAsync(int userId, int deletedBy)
+{
+    try
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // Verificar que no sea el último administrador
+            const string checkAdminQuery = @"
+                SELECT COUNT(1) FROM Usuarios 
+                WHERE (PERFIL = 'ADMINISTRADOR' OR PERFIL = 'ADMIN') 
+                AND IsActive = 1 AND ID != @UserId";
+
+            using var checkAdminCommand = new SqlCommand(checkAdminQuery, connection, transaction);
+            checkAdminCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+
+            var adminCount = Convert.ToInt32(await checkAdminCommand.ExecuteScalarAsync());
+
+            // Obtener información del usuario a eliminar
+            var userToDelete = await GetUserByIdAsync(userId, connection, transaction);
+            if (userToDelete.Data == null)
             {
                 return new ApiResponse<bool>
                 {
                     Success = false,
-                    Message = $"Error al eliminar usuario: {ex.Message}",
-                    Data = false
+                    Message = "Usuario no encontrado"
                 };
             }
-        }
 
-        public async Task<ApiResponse<List<UserActivity>>> GetUserActivityAsync(int userId)
+            // Verificar si es administrador y es el último
+            var userProfile = userToDelete.Data.Perfil.ToString();
+            if ((userProfile == "ADMIN" || userProfile == "ADMINISTRADOR") && adminCount == 0)
+            {
+                return new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "No se puede eliminar el último administrador"
+                };
+            }
+
+            // CONSULTA SIMPLE SIN CAMPOS DUPLICADOS
+            const string deleteQuery = @"
+                UPDATE Usuarios 
+                SET IsActive = 0, 
+                    FechaActualizacion = GETDATE(), 
+                    UpdatedBy = @DeletedBy
+                WHERE ID = @UserId";
+
+            using var deleteCommand = new SqlCommand(deleteQuery, connection, transaction);
+            deleteCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+            deleteCommand.Parameters.Add("@DeletedBy", SqlDbType.Int).Value = deletedBy;
+
+            var rowsAffected = await deleteCommand.ExecuteNonQueryAsync();
+
+            if (rowsAffected == 0)
+            {
+                return new ApiResponse<bool>
+                {
+                    Success = false,
+                    Message = "Usuario no encontrado o ya eliminado"
+                };
+            }
+
+            // Desactivar divisiones asignadas
+            const string deactivateDivisionsQuery = @"
+                UPDATE UserDivisions 
+                SET IsActive = 0
+                WHERE UserID = @UserId";
+
+            using var deactivateCommand = new SqlCommand(deactivateDivisionsQuery, connection, transaction);
+            deactivateCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+            await deactivateCommand.ExecuteNonQueryAsync();
+
+            // Registrar actividad (solo si el método existe)
+            try
+            {
+                await LogUserActivityAsync(userId, deletedBy, "user_deleted", 
+                                         $"Usuario {userToDelete.Data.Usuario} eliminado", 
+                                         "user", userId, null, connection, transaction);
+            }
+            catch
+            {
+                // Si no existe la tabla de actividad, continuar sin error
+            }
+
+            transaction.Commit();
+
+            return new ApiResponse<bool>
+            {
+                Success = true,
+                Message = "Usuario eliminado exitosamente",
+                Data = true
+            };
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
+    catch (Exception ex)
+    {
+        return new ApiResponse<bool>
+        {
+            Success = false,
+            Message = $"Error al eliminar usuario: {ex.Message}",
+            Data = false
+        };
+    }
+}        public async Task<ApiResponse<List<UserActivity>>> GetUserActivityAsync(int userId)
         {
             try
             {
@@ -784,14 +815,15 @@ namespace InventarioAPI.Services
 
             try
             {
+                // SQL Server 2014 compatible - usando STUFF y FOR XML PATH en lugar de STRING_AGG
                 const string query = @"
                     SELECT u.*, 
-                           STRING_AGG(ud.DivisionCode, ',') as DivisionesAsignadas
+                           STUFF((SELECT ',' + ud.DivisionCode 
+                                  FROM UserDivisions ud 
+                                  WHERE ud.UserID = u.ID AND ud.IsActive = 1 
+                                  FOR XML PATH('')), 1, 1, '') as DivisionesAsignadas
                     FROM Usuarios u
-                    LEFT JOIN UserDivisions ud ON u.ID = ud.UserID AND ud.IsActive = 1
-                    WHERE u.ID = @UserId AND u.IsActive = 1
-                    GROUP BY u.ID, u.USUARIO, u.NOMBRE, u.EMAIL, u.PERFIL, u.TIENDA, u.AREA, 
-                             u.IsActive, u.UltimoAcceso, u.FechaCreacion, u.FechaActualizacion";
+                    WHERE u.ID = @UserId AND u.IsActive = 1";
 
                 using var command = transaction != null ? 
                     new SqlCommand(query, connection, transaction) : 

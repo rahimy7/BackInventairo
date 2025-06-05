@@ -102,15 +102,17 @@ namespace InventarioAPI.Services
                 using var connection = new SqlConnection(_inventarioConnection);
                 await connection.OpenAsync();
 
-                const string query = @"
-                    SELECT u.*, 
-                           STRING_AGG(ud.DivisionCode, ',') as DivisionesAsignadas
-                    FROM Usuarios u
-                    LEFT JOIN UserDivisions ud ON u.ID = ud.UserID AND ud.IsActive = 1 AND ud.Tienda = @Tienda
-                    WHERE u.TIENDA = @Tienda AND u.IsActive = 1
-                    GROUP BY u.ID, u.USUARIO, u.NOMBRE, u.EMAIL, u.PERFIL, u.TIENDA, u.AREA, 
-                             u.IsActive, u.UltimoAcceso, u.FechaCreacion, u.FechaActualizacion
-                    ORDER BY u.PERFIL, u.NOMBRE";
+               const string query = @"
+    SELECT u.*, 
+           STUFF((SELECT ',' + ud2.DivisionCode 
+                  FROM UserDivisions ud2 
+                  WHERE ud2.UserID = u.ID 
+                    AND ud2.IsActive = 1 
+                    AND ud2.Tienda = @Tienda
+                  FOR XML PATH('')), 1, 1, '') as DivisionesAsignadas
+    FROM Usuarios u
+    WHERE u.TIENDA = @Tienda AND u.IsActive = 1
+    ORDER BY u.PERFIL, u.NOMBRE";
 
                 using var command = new SqlCommand(query, connection);
                 command.Parameters.Add("@Tienda", SqlDbType.NVarChar, 50).Value = tienda;

@@ -151,34 +151,33 @@ namespace InventarioAPI.Services
                 var assignments = new List<AssignmentResponse>();
                 using var reader = await command.ExecuteReaderAsync();
 
-              while (await reader.ReadAsync())
-{
-    assignments.Add(new AssignmentResponse
-    {
-        ID = reader["ID"] is DBNull ? 0 : Convert.ToInt32(reader["ID"]),
-        UserID = reader["UserID"] is DBNull ? 0 : Convert.ToInt32(reader["UserID"]),
-        Usuario = reader["USUARIO"] is DBNull ? "" : reader["USUARIO"].ToString(),
-        NombreUsuario = reader["NombreUsuario"] is DBNull ? "" : reader["NombreUsuario"].ToString(),
-        Tienda = reader["Tienda"] is DBNull ? "" : reader["Tienda"].ToString(),
-        AssignmentType = Enum.Parse<AssignmentType>(reader["AssignmentType"].ToString()),
-        ProductInfo = new ProductAssignmentInfo
-        {
-            DivisionCode = reader["DivisionCode"] is DBNull ? "" : reader["DivisionCode"].ToString(),
-            Division = reader["Division"] is DBNull ? "" : reader["Division"].ToString(),
-            CategoryCode = reader["CategoryCode"] is DBNull ? "" : reader["CategoryCode"].ToString(),
-            Categoria = reader["Categoria"] is DBNull ? "" : reader["Categoria"].ToString(),
-            GroupCode = reader["GroupCode"] is DBNull ? "" : reader["GroupCode"].ToString(),
-            Grupo = reader["Grupo"] is DBNull ? "" : reader["Grupo"].ToString(),
-            SubGroupCode = reader["SubGroupCode"] is DBNull ? "" : reader["SubGroupCode"].ToString(),
-            SubGrupo = reader["SubGrupo"] is DBNull ? "" : reader["SubGrupo"].ToString()
-        },
-        AssignedBy = reader["AssignedBy"] is DBNull ? 0 : Convert.ToInt32(reader["AssignedBy"]),
-        AssignedByName = reader["AssignedByName"] is DBNull ? "" : reader["AssignedByName"].ToString(),
-        AssignedDate = reader["AssignedDate"] is DBNull ? DateTime.Now : Convert.ToDateTime(reader["AssignedDate"]),
-        IsActive = reader["IsActive"] is DBNull ? false : Convert.ToBoolean(reader["IsActive"])
-    });
-}
-
+                while (await reader.ReadAsync())
+                {
+                    assignments.Add(new AssignmentResponse
+                    {
+                        ID = reader["ID"] is DBNull ? 0 : Convert.ToInt32(reader["ID"]),
+                        UserID = reader["UserID"] is DBNull ? 0 : Convert.ToInt32(reader["UserID"]),
+                        Usuario = reader["USUARIO"] is DBNull ? "" : reader["USUARIO"].ToString(),
+                        NombreUsuario = reader["NombreUsuario"] is DBNull ? "" : reader["NombreUsuario"].ToString(),
+                        Tienda = reader["Tienda"] is DBNull ? "" : reader["Tienda"].ToString(),
+                        AssignmentType = Enum.Parse<AssignmentType>(reader["AssignmentType"].ToString()),
+                        ProductInfo = new ProductAssignmentInfo
+                        {
+                            DivisionCode = reader["DivisionCode"] is DBNull ? "" : reader["DivisionCode"].ToString(),
+                            Division = reader["Division"] is DBNull ? "" : reader["Division"].ToString(),
+                            CategoryCode = reader["CategoryCode"] is DBNull ? "" : reader["CategoryCode"].ToString(),
+                            Categoria = reader["Categoria"] is DBNull ? "" : reader["Categoria"].ToString(),
+                            GroupCode = reader["GroupCode"] is DBNull ? "" : reader["GroupCode"].ToString(),
+                            Grupo = reader["Grupo"] is DBNull ? "" : reader["Grupo"].ToString(),
+                            SubGroupCode = reader["SubGroupCode"] is DBNull ? "" : reader["SubGroupCode"].ToString(),
+                            SubGrupo = reader["SubGrupo"] is DBNull ? "" : reader["SubGrupo"].ToString()
+                        },
+                        AssignedBy = reader["AssignedBy"] is DBNull ? 0 : Convert.ToInt32(reader["AssignedBy"]),
+                        AssignedByName = reader["AssignedByName"] is DBNull ? "" : reader["AssignedByName"].ToString(),
+                        AssignedDate = reader["AssignedDate"] is DBNull ? DateTime.Now : Convert.ToDateTime(reader["AssignedDate"]),
+                        IsActive = reader["IsActive"] is DBNull ? false : Convert.ToBoolean(reader["IsActive"])
+                    });
+                }
 
                 return new ApiResponse<List<AssignmentResponse>>
                 {
@@ -223,15 +222,14 @@ namespace InventarioAPI.Services
                 {
                     hierarchy.Add(new ProductHierarchyItem
                     {
-                     DivisionCode = reader["DivisionCode"] is DBNull ? "" : reader["DivisionCode"].ToString(),
-Division = reader["Division"] is DBNull ? "" : reader["Division"].ToString(),
-CategoryCode = reader["CategoryCode"] is DBNull ? "" : reader["CategoryCode"].ToString(),
-Categoria = reader["Categoria"] is DBNull ? "" : reader["Categoria"].ToString(),
-GroupCode = reader["GroupCode"] is DBNull ? "" : reader["GroupCode"].ToString(),
-Grupo = reader["Grupo"] is DBNull ? "" : reader["Grupo"].ToString(),
-SubGroupCode = reader["SubGroupCode"] is DBNull ? "" : reader["SubGroupCode"].ToString(),
-SubGrupo = reader["SubGrupo"] is DBNull ? "" : reader["SubGrupo"].ToString()
-
+                        DivisionCode = reader["DivisionCode"] is DBNull ? "" : reader["DivisionCode"].ToString(),
+                        Division = reader["Division"] is DBNull ? "" : reader["Division"].ToString(),
+                        CategoryCode = reader["CategoryCode"] is DBNull ? "" : reader["CategoryCode"].ToString(),
+                        Categoria = reader["Categoria"] is DBNull ? "" : reader["Categoria"].ToString(),
+                        GroupCode = reader["GroupCode"] is DBNull ? "" : reader["GroupCode"].ToString(),
+                        Grupo = reader["Grupo"] is DBNull ? "" : reader["Grupo"].ToString(),
+                        SubGroupCode = reader["SubGroupCode"] is DBNull ? "" : reader["SubGroupCode"].ToString(),
+                        SubGrupo = reader["SubGrupo"] is DBNull ? "" : reader["SubGrupo"].ToString()
                     });
                 }
 

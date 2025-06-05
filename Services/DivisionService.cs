@@ -161,14 +161,21 @@ namespace InventarioAPI.Services
                     await connection.OpenAsync();
 
                     const string assignmentQuery = @"
-                        SELECT 
-                            ud.DivisionCode,
-                            COUNT(DISTINCT ud.UserID) as LeadersAsignados,
-                            STRING_AGG(u.NOMBRE, ', ') as NombresLideres
-                        FROM UserDivisions ud
-                        INNER JOIN Usuarios u ON ud.UserID = u.ID
-                        WHERE ud.Tienda = @Tienda AND ud.IsActive = 1 AND u.IsActive = 1
-                        GROUP BY ud.DivisionCode";
+    SELECT 
+        ud.DivisionCode,
+        COUNT(DISTINCT ud.UserID) as LeadersAsignados,
+        STUFF((SELECT ', ' + u2.NOMBRE 
+               FROM UserDivisions ud2 
+               INNER JOIN Usuarios u2 ON ud2.UserID = u2.ID
+               WHERE ud2.DivisionCode = ud.DivisionCode 
+                 AND ud2.Tienda = @Tienda 
+                 AND ud2.IsActive = 1 
+                 AND u2.IsActive = 1
+               FOR XML PATH('')), 1, 2, '') as NombresLideres
+    FROM UserDivisions ud
+    INNER JOIN Usuarios u ON ud.UserID = u.ID
+    WHERE ud.Tienda = @Tienda AND ud.IsActive = 1 AND u.IsActive = 1
+    GROUP BY ud.DivisionCode";
 
                     using var command = new SqlCommand(assignmentQuery, connection);
                     command.Parameters.Add("@Tienda", SqlDbType.NVarChar, 50).Value = tienda;
@@ -539,22 +546,29 @@ namespace InventarioAPI.Services
 
                 // Estadísticas de asignaciones
                 var assignmentStatsQuery = $@"
-                    SELECT 
-                        ud.DivisionCode,
-                        d.Division as DivisionName,
-                        COUNT(DISTINCT ud.UserID) as LideresAsignados,
-                        COUNT(*) as TotalAsignaciones,
-                        STRING_AGG(u.NOMBRE, ', ') as NombresLideres
-                    FROM UserDivisions ud
-                    INNER JOIN Usuarios u ON ud.UserID = u.ID
-                    LEFT JOIN (
-                        SELECT DISTINCT [Division Code] as DivisionCode, [Division]
-                        FROM [INNOVACENTRO].[dbo].[View_ProductosLI]
-                        WHERE [Division Code] IS NOT NULL AND [Division Code] != ''
-                    ) d ON ud.DivisionCode = d.DivisionCode
-                    WHERE ud.IsActive = 1 AND u.IsActive = 1 {(string.IsNullOrEmpty(tienda) ? "" : "AND ud.Tienda = @Tienda")}
-                    GROUP BY ud.DivisionCode, d.Division
-                    ORDER BY LideresAsignados DESC, ud.DivisionCode";
+    SELECT 
+        ud.DivisionCode,
+        d.Division as DivisionName,
+        COUNT(DISTINCT ud.UserID) as LideresAsignados,
+        COUNT(*) as TotalAsignaciones,
+        STUFF((SELECT ', ' + u2.NOMBRE 
+               FROM UserDivisions ud2 
+               INNER JOIN Usuarios u2 ON ud2.UserID = u2.ID
+               WHERE ud2.DivisionCode = ud.DivisionCode 
+                 {(string.IsNullOrEmpty(tienda) ? "" : "AND ud2.Tienda = @Tienda")}
+                 AND ud2.IsActive = 1 
+                 AND u2.IsActive = 1
+               FOR XML PATH('')), 1, 2, '') as NombresLideres
+    FROM UserDivisions ud
+    INNER JOIN Usuarios u ON ud.UserID = u.ID
+    LEFT JOIN (
+        SELECT DISTINCT [Division Code] as DivisionCode, [Division]
+        FROM [INNOVACENTRO].[dbo].[View_ProductosLI]
+        WHERE [Division Code] IS NOT NULL AND [Division Code] != ''
+    ) d ON ud.DivisionCode = d.DivisionCode
+    WHERE ud.IsActive = 1 AND u.IsActive = 1 {(string.IsNullOrEmpty(tienda) ? "" : "AND ud.Tienda = @Tienda")}
+    GROUP BY ud.DivisionCode, d.Division
+    ORDER BY LideresAsignados DESC, ud.DivisionCode";
 
                 using var command = new SqlCommand(assignmentStatsQuery, connection);
                 command.Parameters.AddRange(parameters.ToArray());

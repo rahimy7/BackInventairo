@@ -173,30 +173,29 @@ namespace InventarioAPI.Services
             }
         }
 
-        public async Task UpdateLastAccessAsync(int userId)
-        {
-            try
-            {
-                using var connection = new SqlConnection(_connectionString);
-                await connection.OpenAsync();
+      public async Task UpdateLastAccessAsync(int userId)
+{
+    try
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
 
-                const string query = @"
-                    UPDATE Usuarios 
-                    SET UltimoAcceso = GETDATE(), FechaActualizacion = GETDATE()
-                    WHERE ID = @UserId AND IsActive = 1";
+        const string query = @"
+            UPDATE USUARIOS 
+            SET UltimoAcceso = GETDATE(), FechaActualizacion = GETDATE()
+            WHERE ID = @UserId AND IsActive = 1";
 
-                using var command = new SqlCommand(query, connection);
-                command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+        using var command = new SqlCommand(query, connection);
+        command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
 
-                await command.ExecuteNonQueryAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error updating last access for user {UserId}", userId);
-                // No lanzar excepción para no afectar el login
-            }
-        }
-
+        await command.ExecuteNonQueryAsync();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error updating last access for user {UserId}", userId);
+        // No lanzar excepción para no afectar el login
+    }
+}
         public async Task LogUserActivityAsync(int userId, string action, string description, string? metadata = null)
         {
             try
@@ -226,56 +225,56 @@ namespace InventarioAPI.Services
 
         // Métodos privados
         private async Task<UserInfo?> ValidateUserCredentialsAsync(string usuario, string password)
-        {
-            const string query = @"
-                SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
-                FROM Usuarios 
-                WHERE USUARIO = @Usuario AND PASSWORD = @Password AND IsActive = 1";
+{
+    const string query = @"
+        SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
+        FROM USUARIOS 
+        WHERE USUARIO = @Usuario AND PASSWORD = @Password AND IsActive = 1";
 
-            using var connection = new SqlConnection(_connectionString);
-            using var command = new SqlCommand(query, connection);
-            
-            command.Parameters.Add("@Usuario", SqlDbType.NVarChar, 50).Value = usuario;
-            command.Parameters.Add("@Password", SqlDbType.NVarChar, 255).Value = HashPassword(password);
-            
-            await connection.OpenAsync();
-            
-            using var reader = await command.ExecuteReaderAsync();
-            
-            if (await reader.ReadAsync())
-            {
-                return new UserInfo
-                {
-                    Id = Convert.ToInt32(reader["ID"]),
-                    Usuario = reader["USUARIO"]?.ToString() ?? "",
-                    Nombre = reader["NOMBRE"]?.ToString() ?? "",
-                    Email = reader["EMAIL"]?.ToString() ?? "",
-                    Perfil = reader["PERFIL"]?.ToString() ?? "",
-                    Tienda = reader["TIENDA"]?.ToString() ?? "",
-                    Area = reader["AREA"]?.ToString() ?? "",
-                    Activo = Convert.ToBoolean(reader["IsActive"])
-                };
-            }
-            
-            return null;
-        }
+    using var connection = new SqlConnection(_connectionString);
+    using var command = new SqlCommand(query, connection);
+    
+    command.Parameters.Add("@Usuario", SqlDbType.NVarChar, 50).Value = usuario;
+    command.Parameters.Add("@Password", SqlDbType.NVarChar, 255).Value = HashPassword(password);
+    
+    await connection.OpenAsync();
+    
+    using var reader = await command.ExecuteReaderAsync();
+    
+    if (await reader.ReadAsync())
+    {
+        return new UserInfo
+        {
+            Id = Convert.ToInt32(reader["ID"]),
+            Usuario = reader["USUARIO"]?.ToString() ?? "",
+            Nombre = reader["NOMBRE"]?.ToString() ?? "",
+            Email = reader["EMAIL"]?.ToString() ?? "",
+            Perfil = reader["PERFIL"]?.ToString() ?? "",
+            Tienda = reader["TIENDA"]?.ToString() ?? "",
+            Area = reader["AREA"]?.ToString() ?? "",
+            Activo = Convert.ToBoolean(reader["IsActive"])
+        };
+    }
+    
+    return null;
+}
 
         private async Task<UserInfo?> GetUserByIdAsync(int userId)
         {
             const string query = @"
-                SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
-                FROM Usuarios 
-                WHERE ID = @UserId AND IsActive = 1";
+        SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
+        FROM USUARIOS 
+        WHERE ID = @UserId AND IsActive = 1";
 
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand(query, connection);
-            
+
             command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-            
+
             await connection.OpenAsync();
-            
+
             using var reader = await command.ExecuteReaderAsync();
-            
+
             if (await reader.ReadAsync())
             {
                 return new UserInfo
@@ -290,21 +289,20 @@ namespace InventarioAPI.Services
                     Activo = Convert.ToBoolean(reader["IsActive"])
                 };
             }
-            
+
             return null;
         }
-
         private async Task<bool> IsUserActiveAsync(int userId)
         {
-            const string query = "SELECT IsActive FROM Usuarios WHERE ID = @UserId";
+            const string query = "SELECT IsActive FROM USUARIOS WHERE ID = @UserId";
 
             using var connection = new SqlConnection(_connectionString);
             using var command = new SqlCommand(query, connection);
-            
+
             command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
-            
+
             await connection.OpenAsync();
-            
+
             var result = await command.ExecuteScalarAsync();
             return result != null && Convert.ToBoolean(result);
         }
@@ -324,7 +322,7 @@ namespace InventarioAPI.Services
                 command.Parameters.Add("@Action", SqlDbType.NVarChar, 50).Value = "login_failed";
                 command.Parameters.Add("@Description", SqlDbType.NVarChar, 500).Value = $"Login fallido para usuario: {usuario}";
                 command.Parameters.Add("@EntityType", SqlDbType.NVarChar, 50).Value = "auth";
-                command.Parameters.Add("@Metadata", SqlDbType.NVarChar).Value = 
+                command.Parameters.Add("@Metadata", SqlDbType.NVarChar).Value =
                     $"{{\"usuario\": \"{usuario}\", \"ip\": \"{GetClientIpAddress()}\", \"timestamp\": \"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}\"}}";
 
                 await command.ExecuteNonQueryAsync();

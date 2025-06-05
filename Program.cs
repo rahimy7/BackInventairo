@@ -19,10 +19,18 @@ builder.Services.AddEndpointsApiExplorer();
 
 // Database Contexts
 builder.Services.AddDbContext<InventarioDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
+    sqlOptions => {
+        sqlOptions.CommandTimeout(30); // Timeout en segundos
+        // Opcional: especificar versión de SQL Server si es necesario
+        // sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
 
 builder.Services.AddDbContext<InnovacentroDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("InnovacentroConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("InnovacentroConnection"),
+    sqlOptions => {
+        sqlOptions.CommandTimeout(30);
+    }));
 
 // Swagger Configuration
 builder.Services.AddSwaggerGen(c =>
