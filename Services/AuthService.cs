@@ -223,41 +223,72 @@ namespace InventarioAPI.Services
             }
         }
 
-        // Métodos privados
-        private async Task<UserInfo?> ValidateUserCredentialsAsync(string usuario, string password)
-{
-    const string query = @"
-        SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
-        FROM USUARIOS 
-        WHERE USUARIO = @Usuario AND PASSWORD = @Password AND IsActive = 1";
 
-    using var connection = new SqlConnection(_connectionString);
-    using var command = new SqlCommand(query, connection);
-    
-    command.Parameters.Add("@Usuario", SqlDbType.NVarChar, 50).Value = usuario;
-    command.Parameters.Add("@Password", SqlDbType.NVarChar, 255).Value = HashPassword(password);
-    
-    await connection.OpenAsync();
-    
-    using var reader = await command.ExecuteReaderAsync();
-    
-    if (await reader.ReadAsync())
-    {
-        return new UserInfo
+private async Task<UserInfo?> ValidateUserCredentialsAsync(string usuario, string password)
         {
-            Id = Convert.ToInt32(reader["ID"]),
-            Usuario = reader["USUARIO"]?.ToString() ?? "",
-            Nombre = reader["NOMBRE"]?.ToString() ?? "",
-            Email = reader["EMAIL"]?.ToString() ?? "",
-            Perfil = reader["PERFIL"]?.ToString() ?? "",
-            Tienda = reader["TIENDA"]?.ToString() ?? "",
-            Area = reader["AREA"]?.ToString() ?? "",
-            Activo = Convert.ToBoolean(reader["IsActive"])
-        };
-    }
-    
-    return null;
-}
+            const string query = @"
+                SELECT ID, USUARIO, NOMBRE, EMAIL, PERFIL, TIENDA, AREA, IsActive
+                FROM Usuarios 
+                WHERE USUARIO = @Usuario AND PASSWORD = @Password AND IsActive = 1";
+
+            using var connection = new SqlConnection(_connectionString);
+            using var command = new SqlCommand(query, connection);
+            
+            command.Parameters.Add("@Usuario", SqlDbType.NVarChar, 50).Value = usuario;
+            command.Parameters.Add("@Password", SqlDbType.NVarChar, 255).Value = HashPassword(password);
+            
+            await connection.OpenAsync();
+            
+            using var reader = await command.ExecuteReaderAsync();
+            
+            if (await reader.ReadAsync())
+            {
+                var userInfo = new UserInfo
+                {
+                    Id = Convert.ToInt32(reader["ID"]),
+                    Usuario = reader["USUARIO"]?.ToString() ?? "",
+                    Nombre = reader["NOMBRE"]?.ToString() ?? "",
+                    Email = reader["EMAIL"]?.ToString() ?? "",
+                    Perfil = reader["PERFIL"]?.ToString() ?? "",
+                    Tienda = reader["TIENDA"]?.ToString() ?? "",
+                    Area = reader["AREA"]?.ToString() ?? "",
+                    Activo = Convert.ToBoolean(reader["IsActive"])
+                };
+                
+                reader.Close();
+                
+                // Si el usuario es LIDER, obtener sus divisiones asignadas
+                if (userInfo.Perfil == "LIDER" && !string.IsNullOrEmpty(userInfo.Tienda))
+                {
+                    const string divisionQuery = @"
+                        SELECT DivisionCode 
+                        FROM UserDivisions 
+                        WHERE UserID = @UserId AND Tienda = @Tienda AND IsActive = 1";
+                    
+                    using var divCommand = new SqlCommand(divisionQuery, connection);
+                    divCommand.Parameters.Add("@UserId", SqlDbType.Int).Value = userInfo.Id;
+                    divCommand.Parameters.Add("@Tienda", SqlDbType.NVarChar, 50).Value = userInfo.Tienda;
+                    
+                    using var divReader = await divCommand.ExecuteReaderAsync();
+                    var divisions = new List<string>();
+                    
+                    while (await divReader.ReadAsync())
+                    {
+                        var divisionCode = divReader["DivisionCode"]?.ToString();
+                        if (!string.IsNullOrEmpty(divisionCode))
+                        {
+                            divisions.Add(divisionCode);
+                        }
+                    }
+                    
+                    userInfo.DivisionesAsignadas = divisions;
+                }
+                
+                return userInfo;
+            }
+            
+            return null;
+        }
 
         private async Task<UserInfo?> GetUserByIdAsync(int userId)
         {
