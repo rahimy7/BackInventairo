@@ -193,6 +193,6 @@ app.MapControllers();
 
 // Startup logging
 app.Logger.LogInformation("🚀 Inventario API iniciada exitosamente");
-app.Logger.LogInformation("🔗 Swagger disponible en: {SwaggerUrl}", app.Environment.IsDevelopment() ? "http://localhost:5248" : "URL de producción");
+app.Logger.LogInformation("🔗 Swagger disponible en: {SwaggerUrl}", app.Environment.IsDevelopment() ? "http://172.22.11.5:5248" : "URL de producción");
 
 app.Run();
