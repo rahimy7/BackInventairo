@@ -4,8 +4,7 @@ using InventarioAPI.Models;
 using InventarioAPI.Services;
 using System.Security.Claims;
 using InventarioAPI.Data;
-using Microsoft.EntityFrameworkCore; // O el namespace real de tu InventarioDbContext
-
+using Microsoft.EntityFrameworkCore;
 
 namespace InventarioAPI.Controllers
 {
@@ -26,485 +25,324 @@ namespace InventarioAPI.Controllers
             _innovacentroContext = innovacentroContext;
         }
 
-
         /// <summary>
         /// Crear una nueva solicitud de códigos
         /// </summary>
-        /// <param name="request">Datos de la solicitud</param>
-        /// <returns>Solicitud creada</returns>
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<RequestResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<RequestResponse>>> CreateRequest([FromBody] CreateRequestRequest request)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Datos inválidos",
-                        Errors = ModelState.Values
-                            .SelectMany(v => v.Errors)
-                            .Select(e => e.ErrorMessage)
-                            .ToList()
-                    });
-                }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.CreateRequestAsync(request, currentUserId);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return BadRequest(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.CreateRequestAsync(request, currentUserId);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
 
         /// <summary>
         /// Obtener solicitudes con filtros y paginación
         /// </summary>
-        /// <param name="tienda">Filtrar por tienda</param>
-        /// <param name="status">Filtrar por estado</param>
-        /// <param name="priority">Filtrar por prioridad</param>
-        /// <param name="requestorId">Filtrar por solicitante</param>
-        /// <param name="fromDate">Fecha desde</param>
-        /// <param name="toDate">Fecha hasta</param>
-        /// <param name="pageNumber">Número de página</param>
-        /// <param name="pageSize">Tamaño de página</param>
-        /// <param name="searchTerm">Término de búsqueda</param>
-        /// <returns>Lista paginada de solicitudes</returns>
         [HttpGet]
         [ProducesResponseType(typeof(ApiResponse<PagedResponse<RequestResponse>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<PagedResponse<RequestResponse>>>> GetRequests(
-            [FromQuery] string tienda = "",
-            [FromQuery] RequestStatus? status = null,
-            [FromQuery] RequestPriority? priority = null,
-            [FromQuery] int? requestorId = null,
-            [FromQuery] DateTime? fromDate = null,
-            [FromQuery] DateTime? toDate = null,
-            [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20,
-            [FromQuery] string searchTerm = "")
+            [FromQuery] GetRequestsRequest request)
         {
-            try
-            {
-                var request = new GetRequestsRequest
-                {
-                    Tienda = tienda,
-                    Status = status,
-                    Priority = priority,
-                    RequestorID = requestorId,
-                    FromDate = fromDate,
-                    ToDate = toDate,
-                    PageNumber = pageNumber,
-                    PageSize = Math.Min(pageSize, 100),
-                    SearchTerm = searchTerm
-                };
-
-                var result = await _requestService.GetRequestsAsync(request);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            request.PageSize = Math.Min(request.PageSize, 100);
+            var result = await _requestService.GetRequestsAsync(request);
+            return Ok(result);
         }
 
         /// <summary>
-        /// Obtener una solicitud por su ID
+        /// Obtener solicitud por ID
         /// </summary>
-        /// <param name="id">ID de la solicitud</param>
-        /// <returns>Solicitud con códigos asociados</returns>
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(ApiResponse<RequestResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<RequestResponse>>> GetRequestById(int id)
         {
-            try
-            {
-                var result = await _requestService.GetRequestByIdAsync(id);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return NotFound(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var result = await _requestService.GetRequestByIdAsync(id);
+            return result.Success ? Ok(result) : NotFound(result);
         }
 
         /// <summary>
-        /// Obtener una solicitud por número de ticket
+        /// Obtener solicitud por ticket
         /// </summary>
-        /// <param name="ticketNumber">Número de ticket (ej: REQ-20231128-0001)</param>
-        /// <returns>Solicitud con códigos asociados</returns>
         [HttpGet("ticket/{ticketNumber}")]
-        [ProducesResponseType(typeof(ApiResponse<RequestResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<RequestResponse>>> GetRequestByTicket(string ticketNumber)
         {
-            try
-            {
-                var result = await _requestService.GetRequestByTicketAsync(ticketNumber);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return NotFound(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var result = await _requestService.GetRequestByTicketAsync(ticketNumber);
+            return result.Success ? Ok(result) : NotFound(result);
         }
 
         /// <summary>
-        /// Actualizar el estado de un código específico
+        /// Actualizar estado de código
         /// </summary>
-        /// <param name="request">Datos para actualizar el estado</param>
-        /// <returns>Resultado de la operación</returns>
         [HttpPut("code/status")]
-        [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<bool>>> UpdateCodeStatus([FromBody] UpdateCodeStatusRequest request)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Datos inválidos",
-                        Errors = ModelState.Values
-                            .SelectMany(v => v.Errors)
-                            .Select(e => e.ErrorMessage)
-                            .ToList()
-                    });
-                }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.UpdateCodeStatusAsync(request, currentUserId);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return BadRequest(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.UpdateCodeStatusAsync(request, currentUserId);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
 
         /// <summary>
-        /// Asignar un código manualmente a un usuario
+        /// Asignar código a usuario
         /// </summary>
-        /// <param name="request">Datos de asignación</param>
-        /// <returns>Resultado de la operación</returns>
         [HttpPut("code/assign")]
-        [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<bool>>> AssignCode([FromBody] AssignCodeRequest request)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Datos inválidos",
-                        Errors = ModelState.Values
-                            .SelectMany(v => v.Errors)
-                            .Select(e => e.ErrorMessage)
-                            .ToList()
-                    });
-                }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.AssignCodeAsync(request, currentUserId);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return BadRequest(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.AssignCodeAsync(request, currentUserId);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
 
         /// <summary>
-        /// Agregar un comentario a una solicitud o código específico
+        /// Agregar comentario
         /// </summary>
-        /// <param name="request">Datos del comentario</param>
-        /// <returns>Resultado de la operación</returns>
         [HttpPost("comment")]
-        [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<bool>>> AddComment([FromBody] AddCommentRequest request)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Datos inválidos",
-                        Errors = ModelState.Values
-                            .SelectMany(v => v.Errors)
-                            .Select(e => e.ErrorMessage)
-                            .ToList()
-                    });
-                }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.AddCommentAsync(request, currentUserId);
-
-                if (result.Success)
-                {
-                    return Ok(result);
-                }
-
-                return BadRequest(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.AddCommentAsync(request, currentUserId);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
 
         /// <summary>
-        /// Obtener el historial completo de una solicitud
+        /// Obtener historial de solicitud
         /// </summary>
-        /// <param name="requestId">ID de la solicitud</param>
-        /// <returns>Lista de eventos del historial</returns>
         [HttpGet("{requestId}/history")]
-        [ProducesResponseType(typeof(ApiResponse<List<RequestHistoryResponse>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<List<RequestHistoryResponse>>>> GetRequestHistory(int requestId)
         {
-            try
-            {
-                var result = await _requestService.GetRequestHistoryAsync(requestId);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var result = await _requestService.GetRequestHistoryAsync(requestId);
+            return Ok(result);
         }
 
         /// <summary>
-        /// Obtener dashboard con estadísticas de solicitudes
+        /// Obtener dashboard
         /// </summary>
-        /// <param name="tienda">Filtrar por tienda (opcional)</param>
-        /// <returns>Dashboard con estadísticas</returns>
         [HttpGet("dashboard")]
-        [ProducesResponseType(typeof(ApiResponse<RequestDashboardResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<RequestDashboardResponse>>> GetDashboard([FromQuery] string tienda = "")
         {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.GetDashboardAsync(currentUserId, tienda);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.GetDashboardAsync(currentUserId, tienda);
+            return Ok(result);
         }
 
         /// <summary>
-        /// Obtener códigos asignados al usuario actual
+        /// Obtener códigos asignados al usuario
         /// </summary>
-        /// <returns>Lista de códigos asignados</returns>
         [HttpGet("my-codes")]
-        [ProducesResponseType(typeof(ApiResponse<List<RequestCodeResponse>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<List<RequestCodeResponse>>>> GetMyAssignedCodes()
         {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-                var result = await _requestService.GetMyAssignedCodesAsync(currentUserId);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.GetMyAssignedCodesAsync(currentUserId);
+            return Ok(result);
         }
 
         /// <summary>
-        /// Obtener solicitudes del usuario actual
+        /// Obtener solicitudes del usuario
         /// </summary>
-        /// <param name="status">Filtrar por estado</param>
-        /// <param name="pageNumber">Número de página</param>
-        /// <param name="pageSize">Tamaño de página</param>
-        /// <returns>Solicitudes del usuario</returns>
         [HttpGet("my-requests")]
-        [ProducesResponseType(typeof(ApiResponse<PagedResponse<RequestResponse>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<PagedResponse<RequestResponse>>>> GetMyRequests(
             [FromQuery] RequestStatus? status = null,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
-            try
+            var currentUserId = GetCurrentUserId();
+            var request = new GetRequestsRequest
             {
-                var currentUserId = GetCurrentUserId();
-                var request = new GetRequestsRequest
-                {
-                    RequestorID = currentUserId,
-                    Status = status,
-                    PageNumber = pageNumber,
-                    PageSize = Math.Min(pageSize, 100)
-                };
+                RequestorID = currentUserId,
+                Status = status,
+                PageNumber = pageNumber,
+                PageSize = Math.Min(pageSize, 100)
+            };
 
-                var result = await _requestService.GetRequestsAsync(request);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
+            var result = await _requestService.GetRequestsAsync(request);
+            return Ok(result);
         }
 
         /// <summary>
-        /// Actualizar múltiples códigos a la vez
+        /// Actualizar múltiples códigos
         /// </summary>
-        /// <param name="requests">Lista de actualizaciones</param>
-        /// <returns>Resultado de las operaciones</returns>
         [HttpPut("codes/batch-update")]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ApiResponse<object>>> BatchUpdateCodes([FromBody] List<UpdateCodeStatusRequest> requests)
+        {
+            if (!ModelState.IsValid || !requests.Any())
+                return BadRequest("Datos inválidos o lista vacía");
+
+            var currentUserId = GetCurrentUserId();
+            var results = new List<object>();
+            var successCount = 0;
+            var failCount = 0;
+
+            foreach (var request in requests)
+            {
+                var result = await _requestService.UpdateCodeStatusAsync(request, currentUserId);
+                results.Add(new
+                {
+                    CodeID = request.CodeID,
+                    Success = result.Success,
+                    Message = result.Message
+                });
+
+                if (result.Success)
+                    successCount++;
+                else
+                    failCount++;
+            }
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = failCount == 0,
+                Message = $"Procesadas {requests.Count} actualizaciones. Exitosas: {successCount}, Fallidas: {failCount}",
+                Data = new { Results = results, SuccessCount = successCount, FailCount = failCount }
+            });
+        }
+
+        /// <summary>
+        /// Estadísticas por tienda
+        /// </summary>
+        [HttpGet("stats/tienda/{tienda}")]
+        public async Task<ActionResult<ApiResponse<object>>> GetTiendaStats(string tienda)
+        {
+            var currentUserId = GetCurrentUserId();
+            var dashboard = await _requestService.GetDashboardAsync(currentUserId, tienda);
+
+            if (!dashboard.Success)
+                return BadRequest(dashboard);
+
+            var stats = new
+            {
+                Tienda = tienda,
+                TotalRequests = dashboard.Data.TotalRequests,
+                PendingRequests = dashboard.Data.PendingRequests,
+                InReviewRequests = dashboard.Data.InReviewRequests,
+                CompletedRequests = dashboard.Data.CompletedRequests,
+                OverdueRequests = dashboard.Data.OverdueRequests,
+                CompletionRate = dashboard.Data.TotalRequests > 0 ?
+                    Math.Round((decimal)dashboard.Data.CompletedRequests / dashboard.Data.TotalRequests * 100, 2) : 0
+            };
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Estadísticas obtenidas exitosamente",
+                Data = stats
+            });
+        }
+
+        /// <summary>
+        /// Obtener todas las solicitudes (admin)
+        /// </summary>
+        [HttpGet("admin/all")]
+        [Authorize(Roles = "ADMINISTRADOR")]
+        public async Task<IActionResult> GetAllAdminRequests()
+        {
+            var result = await _requestService.GetAllAdminRequestsAsync();
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Actividad reciente
+        /// </summary>
+        [HttpGet("recent-activity")]
+        public async Task<IActionResult> GetRecentActivity([FromQuery] int count = 20)
+        {
+            var result = await _requestService.GetRecentActivityAsync(count);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Crear solicitudes en lote
+        /// </summary>
+        [HttpPost("bulk-create")]
+        public async Task<ActionResult<ApiResponse<List<RequestResponse>>>> BulkCreateRequests([FromBody] BulkCreateRequest request)
+        {
+            if (!ModelState.IsValid || request.Requests == null || !request.Requests.Any())
+                return BadRequest("Datos inválidos o lista vacía");
+
+            var currentUserId = GetCurrentUserId();
+            var result = await _requestService.BulkCreateRequestsAsync(request, currentUserId);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        /// <summary>
+        /// Asignar códigos en lote
+        /// </summary>
+        [HttpPut("bulk-assign")]
+        public async Task<IActionResult> BulkAssign([FromBody] BulkAssignCodesRequest request)
+        {
+            var userId = GetCurrentUserId();
+            var result = await _requestService.BulkAssignCodesAsync(request, userId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Actualizar estados en lote
+        /// </summary>
+        [HttpPut("bulk-update-status")]
+        public async Task<IActionResult> BulkStatus([FromBody] BulkUpdateStatusRequest request)
+        {
+            var userId = GetCurrentUserId();
+            var result = await _requestService.BulkUpdateStatusAsync(request, userId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Filtrar por divisiones
+        /// </summary>
+        [HttpPost("by-divisions")]
+        public async Task<IActionResult> GetByDivisions([FromBody] DivisionFilterRequest request)
+        {
+            var result = await _requestService.GetRequestsByDivisionsAsync(request);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Cerrar solicitud
+        /// </summary>
+        [HttpPut("{requestId}/close")]
+        public async Task<IActionResult> CloseRequest(int requestId)
+        {
+            var userId = GetCurrentUserId();
+            var result = await _requestService.CloseRequestAsync(requestId, userId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Obtener producto por código
+        /// </summary>
+        [HttpGet("product/{productCode}")]
+        public async Task<IActionResult> GetProductByCode(string productCode)
         {
             try
             {
-                if (!ModelState.IsValid || !requests.Any())
-                {
-                    return BadRequest(new ApiResponse<object>
+                var product = await _innovacentroContext.ProductViews
+                    .Where(p => p.Code == productCode)
+                    .FirstOrDefaultAsync();
+
+                if (product == null)
+                    return Ok(new ApiResponse<object>
                     {
                         Success = false,
-                        Message = "Datos inválidos o lista vacía"
+                        Message = "Producto no encontrado"
                     });
-                }
-
-                var currentUserId = GetCurrentUserId();
-                var results = new List<object>();
-                var successCount = 0;
-                var failCount = 0;
-
-                foreach (var request in requests)
-                {
-                    var result = await _requestService.UpdateCodeStatusAsync(request, currentUserId);
-
-                    results.Add(new
-                    {
-                        CodeID = request.CodeID,
-                        Success = result.Success,
-                        Message = result.Message
-                    });
-
-                    if (result.Success)
-                        successCount++;
-                    else
-                        failCount++;
-                }
 
                 return Ok(new ApiResponse<object>
                 {
-                    Success = failCount == 0,
-                    Message = $"Procesadas {requests.Count} actualizaciones. Exitosas: {successCount}, Fallidas: {failCount}",
-                    Data = new { Results = results, SuccessCount = successCount, FailCount = failCount }
+                    Success = true,
+                    Data = product
                 });
             }
             catch (Exception ex)
@@ -512,110 +350,18 @@ namespace InventarioAPI.Controllers
                 return StatusCode(500, new ApiResponse<object>
                 {
                     Success = false,
-                    Message = "Error interno del servidor",
+                    Message = "Error al buscar producto",
                     Errors = new List<string> { ex.Message }
                 });
             }
         }
 
-        /// <summary>
-        /// Obtener estadísticas por tienda
-        /// </summary>
-        /// <param name="tienda">Código de tienda</param>
-        /// <returns>Estadísticas de la tienda</returns>
-        [HttpGet("stats/tienda/{tienda}")]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<ApiResponse<object>>> GetTiendaStats(string tienda)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-                var dashboard = await _requestService.GetDashboardAsync(currentUserId, tienda);
-
-                if (dashboard.Success)
-                {
-                    var stats = new
-                    {
-                        Tienda = tienda,
-                        TotalRequests = dashboard.Data.TotalRequests,
-                        PendingRequests = dashboard.Data.PendingRequests,
-                        InReviewRequests = dashboard.Data.InReviewRequests,
-                        CompletedRequests = dashboard.Data.CompletedRequests,
-                        OverdueRequests = dashboard.Data.OverdueRequests,
-                        CompletionRate = dashboard.Data.TotalRequests > 0 ?
-                            Math.Round((decimal)dashboard.Data.CompletedRequests / dashboard.Data.TotalRequests * 100, 2) : 0
-                    };
-
-                    return Ok(new ApiResponse<object>
-                    {
-                        Success = true,
-                        Message = "Estadísticas de tienda obtenidas exitosamente",
-                        Data = stats
-                    });
-                }
-
-                return BadRequest(dashboard);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new ApiResponse<object>
-                {
-                    Success = false,
-                    Message = "Error interno del servidor",
-                    Errors = new List<string> { ex.Message }
-                });
-            }
-        }
-
-        // Método auxiliar para obtener el ID del usuario actual
         private int GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(userIdClaim, out int userId))
-            {
                 return userId;
-            }
-            throw new UnauthorizedAccessException("No se pudo obtener el ID del usuario autenticado");
+            throw new UnauthorizedAccessException("No se pudo obtener el ID del usuario");
         }
-
-        // En RequestController.cs o en un nuevo ProductController.cs
-
-        [HttpGet("product/{productCode}")]
-[Authorize]
-public async Task<IActionResult> GetProductByCode(string productCode)
-{
-    try
-    {
-        var product = await _innovacentroContext.ProductViews
-            .Where(p => p.Code == productCode)
-            .FirstOrDefaultAsync();
-
-        if (product == null)
-        {
-            return Ok(new ApiResponse<object>
-            {
-                Success = false,
-                Message = "Producto no encontrado"
-            });
-        }
-
-        return Ok(new ApiResponse<object>
-        {
-            Success = true,
-            Data = product
-        });
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new ApiResponse<object>
-        {
-            Success = false,
-            Message = "Error al buscar producto",
-            Errors = new List<string> { ex.Message }
-        });
-    }
-}
-
     }
 }

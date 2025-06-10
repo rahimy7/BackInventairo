@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using InventarioAPI.Models;
+using InventarioAPI.Models.Tasks;
 
 namespace InventarioAPI.Data
 {
@@ -7,7 +8,9 @@ namespace InventarioAPI.Data
     {
         public InventarioDbContext(DbContextOptions<InventarioDbContext> options) : base(options) { }
 
-public DbSet<Product> Products { get; set; }
+public DbSet<TaskEntity> Tasks { get; set; }
+
+        public DbSet<Product> Products { get; set; }
 
         // Aún no tienes entidades reales con estos nombres
         // public DbSet<Product> Products { get; set; }

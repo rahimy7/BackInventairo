@@ -2,9 +2,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace InventarioAPI.Models
 {
-  
 
-   public enum RequestStatus
+
+    public enum RequestStatus
     {
         PENDIENTE,
         EN_REVISION,
@@ -71,10 +71,10 @@ namespace InventarioAPI.Models
         public DateTime? DueDate { get; set; }
         public DateTime? CompletedDate { get; set; }
         public bool IsActive { get; set; }
-        
+
         // Códigos asociados
         public List<RequestCodeResponse> Codes { get; set; } = new List<RequestCodeResponse>();
-        
+
         // Estadísticas
         public RequestStatsInfo Stats { get; set; } = new RequestStatsInfo();
     }
@@ -201,7 +201,7 @@ namespace InventarioAPI.Models
         public int OverdueRequests { get; set; }
         public int MyAssignedCodes { get; set; }
         public int MyPendingCodes { get; set; }
-        
+
         public List<RequestsByTiendaStats> RequestsByTienda { get; set; } = new List<RequestsByTiendaStats>();
         public List<RequestsByStatusStats> RequestsByStatus { get; set; } = new List<RequestsByStatusStats>();
         public List<RequestResponse> RecentRequests { get; set; } = new List<RequestResponse>();
@@ -223,4 +223,25 @@ namespace InventarioAPI.Models
         public int Count { get; set; }
         public decimal Percentage { get; set; }
     }
+
+    public class BulkCreateRequest
+    {
+        public List<CreateRequestRequest> Requests { get; set; } = new();
+    }
+
+    public class BulkAssignCodesRequest
+    {
+        public List<int> CodeIDs { get; set; } = new();
+        public int AssignedToID { get; set; }
+        public string Notes { get; set; } = string.Empty;
+    }
+
+public class BulkUpdateStatusRequest
+{
+    public List<int> CodeIDs { get; set; } = new();
+    public RequestStatus Status { get; set; }
+    public string Notes { get; set; } = string.Empty;
+}
+
+
 }

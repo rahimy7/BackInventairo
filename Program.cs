@@ -32,7 +32,10 @@ builder.Services.AddDbContext<InnovacentroDbContext>(options =>
         sqlOptions.CommandTimeout(30);
     }));
 
-// Swagger Configuration
+builder.Services.AddScoped<ITaskService, TaskService>();
+
+// En tu Program.cs, reemplaza la sección de Swagger con esto:
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo 
@@ -71,6 +74,9 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
+    c.TagActionsBy(api => new[] { api.GroupName ?? api.ActionDescriptor.RouteValues["controller"] });
+
+
     // Enable XML comments for better Swagger documentation
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
@@ -78,8 +84,21 @@ builder.Services.AddSwaggerGen(c =>
     {
         c.IncludeXmlComments(xmlPath);
     }
+    
+    // Incluir todos los archivos XML adicionales (cambiar nombre de variable)
+    var xmlFiles = Directory.GetFiles(AppContext.BaseDirectory, "*.xml");
+    foreach (var additionalXmlFile in xmlFiles.Where(f => f != xmlPath))
+    {
+        try 
+        {
+            c.IncludeXmlComments(additionalXmlFile);
+        }
+        catch 
+        {
+            // Ignorar archivos XML que no sean de documentación
+        }
+    }
 });
-
 // JWT Configuration
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
@@ -120,17 +139,19 @@ builder.Services.AddScoped<IInventoryCountService, InventoryCountService>();
 builder.Services.AddScoped<IStoreService, StoreService>();
 builder.Services.AddScoped<IDivisionService, DivisionService>();
 
-// CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
+    options.AddPolicy("Production",
         policy =>
         {
-            policy.AllowAnyOrigin()
+            policy.WithOrigins("https://tudominio.com")
                   .AllowAnyMethod()
-                  .AllowAnyHeader();
+                  .AllowAnyHeader()
+                  .AllowCredentials();
         });
 });
+
+
 
 // Health Checks
 builder.Services.AddHealthChecks();
@@ -186,7 +207,7 @@ app.Map("/error", (HttpContext context) =>
 // Health Check endpoint
 app.MapHealthChecks("/health");
 
-app.UseCors("AllowAll");
+app.UseCors(app.Environment.IsDevelopment() ? "AllowAll" : "Production");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
